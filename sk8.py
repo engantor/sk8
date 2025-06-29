@@ -1,4 +1,4 @@
-# SK8 - v0.5
+# SK8 - v0.6
 
 import random
 import os
@@ -19,9 +19,13 @@ BASE_DIFFICULTIES = {
     'nose_grind': 5, 'crooked_grind': 6, 'feeble_grind': 6, 'salad_grind': 6,
     'willy_grind': 5, 'blunt_slide': 6, 'tall_ledge': 3, 'hubba': 4, 'flat_bar': 3,
     'round_rail': 4, 'down_rail': 4, 'kicker_ramp': 2, '3_stair': 3, '5_stair': 3,
+    # Shuvit tricks added in v0.6
+    'pop_shuvit': 2, 'fs_pop_shuvit': 3, 'bs_pop_shuvit': 3, '360_pop_shuvit': 4,
 }
 # A set of all flip tricks for easy checking.
 FLIP_TRICKS = {'kickflip', 'heelflip', 'treflip', 'varial_kickflip', 'varial_heelflip', 'hardflip', 'inward_heelflip'}
+# A set of all shuvit tricks added in v0.6
+SHUVIT_TRICKS = {'pop_shuvit', 'fs_pop_shuvit', 'bs_pop_shuvit', '360_pop_shuvit'}
 # A dictionary defining the stance cards and their difficulty bonus.
 STANCES = {'nollie': 3, 'fakie': 2, 'switch': 2}
 # The main database of tricks used by the game, with difficulties adjusted based on rules.
@@ -41,7 +45,7 @@ GRINDS_SLIDES = {'fifty_fifty', 'five_o', 'boardslide', 'lipslide', 'noseslide',
 OBSTACLES = {'tall_ledge', 'hubba', 'flat_bar', 'round_rail', 'down_rail', 'kicker_ramp', '3_stair', '5_stair'}
 STAIRS = {'3_stair', '5_stair'}
 GRIND_SURFACES = {'tall_ledge', 'hubba', 'flat_bar', 'round_rail', 'down_rail'}
-ALL_CATEGORIES = {"Flips": FLIP_TRICKS, "Grinds": GRINDS_SLIDES, "Spins": SPIN_TRICKS, "Obstacles": OBSTACLES}
+ALL_CATEGORIES = {"Flips": FLIP_TRICKS, "Shuvits": SHUVIT_TRICKS, "Grinds": GRINDS_SLIDES, "Spins": SPIN_TRICKS, "Obstacles": OBSTACLES}
 
 
 class Skater:
@@ -80,7 +84,7 @@ def setup_logging():
     """Configures logging to a file named sk8-log.txt in the script's directory."""
     try:
         script_dir = Path(__file__).parent.resolve()
-        log_file = script_dir / 'sk8-log.txt' # BUG FIX: Corrected filename.
+        log_file = script_dir / 'sk8-log.txt'
         logging.basicConfig(
             level=logging.DEBUG,
             format='%(asctime)s - %(levelname)s - %(message)s',
@@ -135,7 +139,8 @@ def get_combo_display_name(combo):
 
 def create_themed_deck(skater: Skater):
     """Creates a unique, themed deck based on the chosen skater."""
-    base_deck = ['bs_180', 'fs_180', 'wax', 'thrasher_magazine', 'thrasher_magazine', 'focus', 'pro_model_deck', 'sponsors', 'sponsors', 'bail', 'fakie', 'nollie', 'switch']
+    # Added 'pop_shuvit' to the base deck for all players
+    base_deck = ['bs_180', 'fs_180', 'pop_shuvit', 'wax', 'thrasher_magazine', 'thrasher_magazine', 'focus', 'pro_model_deck', 'sponsors', 'sponsors', 'bail', 'fakie', 'nollie', 'switch']
     specialty_packs = {
         "Flip Pro": ['kickflip']*3 + ['heelflip']*2 + ['treflip', 'varial_kickflip', 'hardflip', 'inward_heelflip'] + ['tall_ledge', '3_stair'] + ['focus', 'sponsors'],
         "Grind Specialist": ['fifty_fifty']*2 + ['boardslide']*2 + ['lipslide', 'crooked_grind', 'salad_grind', 'willy_grind'] + ['tall_ledge']*2 + ['flat_bar', 'down_rail', 'hubba'] + ['wax', 'wax', 'bail'],
@@ -217,7 +222,7 @@ class SkateGame:
 
     def setup_game(self):
         """Handles initial game setup: skater selection, deck creation, and dealing."""
-        clear_screen(); print("Welcome to SK8 - v0.5"); time.sleep(1)
+        clear_screen(); print("Welcome to SK8 - v0.6"); time.sleep(1)
         self.skater_selection()
         for player in self.players:
             player.deck = create_themed_deck(player.skater)
@@ -298,7 +303,10 @@ class SkateGame:
     def validate_combo(self, combo):
         """Validates a combo based on the game's rules."""
         if not any(c in TRICKS_DATABASE or c in STANCES for c in combo): return False, "You must select at least one trick card."
-        stance_cards = [c for c in combo if c in STANCES]; flip_cards = [c for c in combo if c in FLIP_TRICKS]
+        stance_cards = [c for c in combo if c in STANCES]
+        flip_cards = [c for c in combo if c in FLIP_TRICKS]
+        shuvit_cards = [c for c in combo if c in SHUVIT_TRICKS]
+        
         if len(stance_cards) > 1: return False, "Cannot use more than one Stance."
         if stance_cards and 'ollie' in combo and flip_cards: return False, "Cannot do a Stance Ollie and a Late Flip at the same time."
         if stance_cards and not flip_cards and 'ollie' not in combo: return False, "Stances must modify an Ollie or a Flip Trick."
@@ -307,6 +315,11 @@ class SkateGame:
         if 'kicker_ramp' in combo and any(c in STAIRS for c in combo): return False, "Cannot combine a kicker with stairs."
         if len(set(c for c in combo if c in GRINDS_SLIDES)) > 1: return False, "Can't do more than one type of grind."
         if 'wax' in combo and not any(c in GRINDS_SLIDES for c in combo): return False, "'Wax' only works with grinds or slides."
+        
+        # New Shuvit Rules
+        if len(set(shuvit_cards)) > 1: return False, "Cannot combine more than one type of Shuvit."
+        if flip_cards and shuvit_cards: return False, "Cannot combine a Flip and a Shuvit card. Use Varial Flips instead."
+
         return True, "Valid combo!"
 
     def switch_setter(self): self.setter_index = (self.setter_index + 1) % len(self.players)
@@ -495,7 +508,7 @@ class SkateGame:
         ability = player.skater.activated_ability
         if len([c for c in player.hand if c != 'ollie']) < ability['cost']: print(f"\nNeed at least {ability['cost']} discardable cards."); time.sleep(2); return
         search_category = ability['category']
-        category_name = [k for k,v in globals().items() if v == search_category][0].replace('_', ' ').title()
+        category_name = next((k for k, v in ALL_CATEGORIES.items() if v == search_category), "Unknown").replace('_', ' ').title()
         self.display_status(); print(f"\nChoose {ability['cost']} cards to discard to search for a {category_name} card.")
         discardable_hand = [c for c in player.hand if c != 'ollie']
         for i, card in enumerate(discardable_hand): print(f"  {i+1}: {card.replace('_', ' ').title()}")
@@ -522,7 +535,7 @@ class SkateGame:
         """Allows a player to use their trade ability."""
         print("\n--- TRADE ABILITY ---")
         expertise_category = player.skater.activated_ability['category']
-        expertise_name = [k for k, v in globals().items() if v == expertise_category][0].replace('_', ' ').title()
+        expertise_name = next((k for k, v in ALL_CATEGORIES.items() if v == expertise_category), "Unknown").replace('_', ' ').title()
         cards_to_trade = [card for card in player.hand if card in expertise_category]
         if not cards_to_trade: print(f"You don't have any {expertise_name} cards to trade!"); time.sleep(2); return
         self.display_status(); print(f"Choose one of your {expertise_name} cards to discard:")
@@ -557,6 +570,6 @@ class SkateGame:
 if __name__ == "__main__":
     if setup_logging():
         clear_screen()
-        print("Welcome to SK8 - v0.5")
+        print("Welcome to SK8 - v0.6") # Updated version printout
         game = SkateGame('pve')
         game.run()

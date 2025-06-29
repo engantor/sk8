@@ -1,4 +1,4 @@
-# SK8 (v0.5)
+# SK8 (v0.6)
 
 Yo! This is SK8, a turn-based card and dice game. Here's the quick-and-dirty on getting it running.
 
