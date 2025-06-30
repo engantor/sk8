@@ -1,4 +1,4 @@
-# SK8 (v0.6)
+# SK8 (v0.7.1)
 
 Yo! This is SK8, a turn-based card and dice game. Here's the quick-and-dirty on getting it running.
 
@@ -15,7 +15,7 @@ Yo! This is SK8, a turn-based card and dice game. Here's the quick-and-dirty on 
 2.  Open a terminal or command prompt inside that `sk8` folder.
 3.  Run the command: `python sk8.py`
 
-That's it. The game will start. A `sk8-log.txt` file will be created in the folder for any debugging.
+That's it. The game will start. A `sk8.log` file will be created in the folder for any debugging.
 
 ## The Rules
 

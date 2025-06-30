@@ -1,4 +1,4 @@
-# SK8 - v0.6
+# SK8 - v7.1 (Logging, Late Shuvits & New Cards Update)
 
 import random
 import os
@@ -19,18 +19,25 @@ BASE_DIFFICULTIES = {
     'nose_grind': 5, 'crooked_grind': 6, 'feeble_grind': 6, 'salad_grind': 6,
     'willy_grind': 5, 'blunt_slide': 6, 'tall_ledge': 3, 'hubba': 4, 'flat_bar': 3,
     'round_rail': 4, 'down_rail': 4, 'kicker_ramp': 2, '3_stair': 3, '5_stair': 3,
-    # Shuvit tricks added in v0.6
-    'pop_shuvit': 2, 'fs_pop_shuvit': 3, 'bs_pop_shuvit': 3, '360_pop_shuvit': 4,
+    'pop_shuvit': 2, 'fs_pop_shuvit': 3, 'bs_pop_shuvit': 3,
+    # New 360 Shuvits, replacing the generic one.
+    'bs_360_pop_shuvit': 4, 'fs_360_pop_shuvit': 5,
 }
-# A set of all flip tricks for easy checking.
+# Card Categories
 FLIP_TRICKS = {'kickflip', 'heelflip', 'treflip', 'varial_kickflip', 'varial_heelflip', 'hardflip', 'inward_heelflip'}
-# A set of all shuvit tricks added in v0.6
-SHUVIT_TRICKS = {'pop_shuvit', 'fs_pop_shuvit', 'bs_pop_shuvit', '360_pop_shuvit'}
-# A dictionary defining the stance cards and their difficulty bonus.
+SHUVIT_TRICKS = {'pop_shuvit', 'fs_pop_shuvit', 'bs_pop_shuvit', 'bs_360_pop_shuvit', 'fs_360_pop_shuvit'}
 STANCES = {'nollie': 3, 'fakie': 2, 'switch': 2}
-# The main database of tricks used by the game, with difficulties adjusted based on rules.
+SPIN_TRICKS = {'bs_180', 'fs_180', 'bs_360', 'fs_360'}
+GRINDS_SLIDES = {'fifty_fifty', 'five_o', 'boardslide', 'lipslide', 'noseslide', 'tailslide', 'nose_grind', 'crooked_grind', 'feeble_grind', 'salad_grind', 'willy_grind', 'blunt_slide'}
+OBSTACLES = {'tall_ledge', 'hubba', 'flat_bar', 'round_rail', 'down_rail', 'kicker_ramp', '3_stair', '5_stair'}
+STAIRS = {'3_stair', '5_stair'}
+GRIND_SURFACES = {'tall_ledge', 'hubba', 'flat_bar', 'round_rail', 'down_rail'}
+
+# Core Trick Set (for validation)
+CORE_TRICKS = FLIP_TRICKS | SHUVIT_TRICKS | GRINDS_SLIDES | SPIN_TRICKS | {'ollie'}
+
+# The main database of tricks used by the game
 TRICKS_DATABASE = {k: max(1, (v - 1)) if k in FLIP_TRICKS else v for k, v in BASE_DIFFICULTIES.items()}
-# A dictionary for all special, non-trick cards.
 SPECIAL_CARDS = {
     'wax': {'description': 'Play with a Grind/Slide combo to reduce its difficulty by 2.'},
     'thrasher_magazine': {'description': 'Shuffle your hand (except Ollie) and draw 7 new cards.'},
@@ -39,14 +46,7 @@ SPECIAL_CARDS = {
     'sponsors': {'description': 'Draw 2 cards. You must use them this turn or they are discarded.'},
     'bail': {'description': 'Force an opponent to re-roll a successful trick-setting roll.'}
 }
-# Card categories for validation and abilities.
-SPIN_TRICKS = {'bs_180', 'fs_180', 'bs_360', 'fs_360'}
-GRINDS_SLIDES = {'fifty_fifty', 'five_o', 'boardslide', 'lipslide', 'noseslide', 'tailslide', 'nose_grind', 'crooked_grind', 'feeble_grind', 'salad_grind', 'willy_grind', 'blunt_slide'}
-OBSTACLES = {'tall_ledge', 'hubba', 'flat_bar', 'round_rail', 'down_rail', 'kicker_ramp', '3_stair', '5_stair'}
-STAIRS = {'3_stair', '5_stair'}
-GRIND_SURFACES = {'tall_ledge', 'hubba', 'flat_bar', 'round_rail', 'down_rail'}
 ALL_CATEGORIES = {"Flips": FLIP_TRICKS, "Shuvits": SHUVIT_TRICKS, "Grinds": GRINDS_SLIDES, "Spins": SPIN_TRICKS, "Obstacles": OBSTACLES}
-
 
 class Skater:
     """Represents a skater with their unique set of abilities."""
@@ -81,10 +81,10 @@ SKATERS = [
 LETTERS, STARTING_HAND_SIZE, MAX_LETTERS = "SK8", 8, len("SK8")
 
 def setup_logging():
-    """Configures logging to a file named sk8-log.txt in the script's directory."""
+    """Configures logging to a file named sk8.log in the script's directory."""
     try:
         script_dir = Path(__file__).parent.resolve()
-        log_file = script_dir / 'sk8-log.txt'
+        log_file = script_dir / 'sk8.log'
         logging.basicConfig(
             level=logging.DEBUG,
             format='%(asctime)s - %(levelname)s - %(message)s',
@@ -92,54 +92,80 @@ def setup_logging():
             filemode='w'
         )
         print(f"Logging is active. Log file will be saved to: {log_file}")
+        logging.info("--- SK8 Game Log Started ---")
         return True
     except Exception as e:
-        print(f"Error setting up logging: {e}."); return False
+        print(f"Error setting up logging: {e}. Logging will be disabled.")
+        return False
 
 def clear_screen():
-    """Clears the terminal screen for a better user experience."""
     os.system('cls' if os.name == 'nt' else 'clear')
 
 def roll_dice(with_advantage=False):
-    """Rolls 2d8, or 3d8 and drops the lowest if with advantage."""
     if with_advantage:
         rolls = sorted([random.randint(1, 8) for _ in range(3)])
+        result = sum(rolls[1:])
+        logging.debug(f"Rolling with advantage. Rolls: {rolls}. Dropped: {rolls[0]}. Result: {result}")
         print(f"(Rolled {rolls[0]}, {rolls[1]}, {rolls[2]} and dropped a {rolls[0]})")
-        return sum(rolls[1:])
-    return random.randint(1, 8) + random.randint(1, 8)
+        return result
+    roll1 = random.randint(1, 8)
+    roll2 = random.randint(1, 8)
+    result = roll1 + roll2
+    logging.debug(f"Standard roll. Rolls: [{roll1}, {roll2}]. Result: {result}")
+    return result
 
 def get_combo_display_name_single(card, count):
-    """Generates a display name for a single type of card, handling duplicates."""
     if count <= 1: return card.replace('_', ' ').title()
     prefixes = {2: "Double", 3: "Triple", 4: "Quad"}
     return f"{prefixes.get(count, f'{count}x')} {card.replace('_', ' ').title()}"
 
 def get_combo_display_name(combo):
-    """Generates a full display name for a trick combo, handling special cases like Late Flips."""
-    combo_counts = Counter(combo)
-    display_parts, processed_cards = [], set()
-    stance = next((c for c in combo if c in STANCES), None)
-    is_late_flip = 'ollie' in combo_counts and any(c in FLIP_TRICKS for c in combo)
-    if stance:
-        flip_trick = next((c for c in combo if c in FLIP_TRICKS), None)
-        if flip_trick:
-            display_parts.append(f"{stance.title()} {flip_trick.replace('_', ' ').title()}"); processed_cards.add(stance); processed_cards.add(flip_trick)
-        elif 'ollie' in combo_counts:
-            display_parts.append(f"{stance.title()} Ollie"); processed_cards.add(stance); processed_cards.add('ollie')
-    elif is_late_flip:
-        flip_trick = next(c for c in combo if c in FLIP_TRICKS)
-        display_parts.append(f"Late {flip_trick.replace('_', ' ').title()}"); processed_cards.add(flip_trick); processed_cards.add('ollie')
-    for card in sorted(combo):
-        if card in processed_cards or card in SPECIAL_CARDS: continue
-        count = combo_counts[card]
-        if card in TRICKS_DATABASE or card in STANCES:
-            display_parts.append(get_combo_display_name_single(card, count))
-        processed_cards.add(card)
+    """Generates a full display name for a trick combo, handling special cases like Late Flips based on order."""
+    if not any(c in TRICKS_DATABASE or c in STANCES for c in combo):
+        return "a basic move"
+    combo_worklist = list(combo)
+    display_parts = []
+    
+    # 1. Stanced Late Flip / Stanced Late Shuvit
+    if len(combo_worklist) >= 3 and combo_worklist[0] in STANCES and combo_worklist[1] == 'ollie':
+        stance, next_trick = combo_worklist[0], combo_worklist[2]
+        late_type = None
+        if next_trick in FLIP_TRICKS: late_type = "Flip"
+        elif next_trick in SHUVIT_TRICKS: late_type = "Shuvit"
+        
+        if late_type:
+            display_parts.append(f"{stance.title()} Late {next_trick.replace('_', ' ').title()}")
+            combo_worklist.pop(0); combo_worklist.pop(0); combo_worklist.pop(0)
+
+    # 2. Stance + Any Trick (if not a late trick)
+    if len(combo_worklist) >= 2 and combo_worklist[0] in STANCES and combo_worklist[1] in CORE_TRICKS:
+        stance, trick = combo_worklist[0], combo_worklist[1]
+        display_parts.append(f"{stance.title()} {trick.replace('_', ' ').title()}")
+        combo_worklist.pop(0); combo_worklist.pop(0)
+
+    # 3. Late Flips and Late Shuvits
+    i = 0
+    while i < len(combo_worklist) - 1:
+        if combo_worklist[i] == 'ollie' and (combo_worklist[i + 1] in FLIP_TRICKS or combo_worklist[i+1] in SHUVIT_TRICKS):
+            late_trick = combo_worklist[i + 1]
+            display_parts.append(f"Late {late_trick.replace('_', ' ').title()}")
+            combo_worklist[i] = None; combo_worklist[i + 1] = None
+            i += 2
+        else:
+            i += 1
+    combo_worklist = [c for c in combo_worklist if c is not None]
+
+    # 4. Handle remaining cards
+    if combo_worklist:
+        combo_counts = Counter(combo_worklist)
+        for card in sorted(combo_counts.keys()):
+            if card in SPECIAL_CARDS or card in STANCES: continue
+            if card in TRICKS_DATABASE:
+                display_parts.append(get_combo_display_name_single(card, combo_counts[card]))
+
     return ' + '.join(display_parts) if display_parts else "a basic move"
 
 def create_themed_deck(skater: Skater):
-    """Creates a unique, themed deck based on the chosen skater."""
-    # Added 'pop_shuvit' to the base deck for all players
     base_deck = ['bs_180', 'fs_180', 'pop_shuvit', 'wax', 'thrasher_magazine', 'thrasher_magazine', 'focus', 'pro_model_deck', 'sponsors', 'sponsors', 'bail', 'fakie', 'nollie', 'switch']
     specialty_packs = {
         "Flip Pro": ['kickflip']*3 + ['heelflip']*2 + ['treflip', 'varial_kickflip', 'hardflip', 'inward_heelflip'] + ['tall_ledge', '3_stair'] + ['focus', 'sponsors'],
@@ -155,7 +181,6 @@ def create_themed_deck(skater: Skater):
     return final_deck
 
 class Player:
-    """Represents a player in the game, holding their hand, deck, and game state."""
     def __init__(self, name, is_ai=False):
         self.name, self.letters, self.skater, self.deck, self.discard_pile = name, "", None, [], []
         self.is_ai = is_ai
@@ -163,23 +188,22 @@ class Player:
         self.temporary_cards = []
     
     def draw_card(self, num_cards=1):
-        """Draws cards, reshuffling the discard pile if the deck is empty."""
         drawn_cards = []
         for _ in range(num_cards):
             if not self.deck and self.discard_pile:
+                logging.info(f"{self.name}'s deck is empty. Reshuffling {len(self.discard_pile)} cards.")
                 print(f"\n{self.name}'s deck is empty! Reshuffling discard pile...")
-                self.deck = self.discard_pile[:]
-                self.discard_pile = []
+                self.deck = self.discard_pile[:]; self.discard_pile = []
                 random.shuffle(self.deck)
                 time.sleep(1.5)
             if self.deck:
                 card = self.deck.pop()
                 self.hand.append(card)
                 drawn_cards.append(card)
+        logging.debug(f"{self.name} drew: {drawn_cards}")
         return drawn_cards
 
     def discard_cards(self, cards_to_discard):
-        """Discards cards from hand to the discard pile, except the permanent Ollie."""
         actual_discards = [c for c in cards_to_discard if c != 'ollie']
         for card in actual_discards:
             if card in self.hand:
@@ -187,17 +211,15 @@ class Player:
                 self.discard_pile.append(card)
                 if card in self.temporary_cards:
                     self.temporary_cards.remove(card)
+        if actual_discards: logging.debug(f"{self.name} discarded: {actual_discards}")
     
     def has_any_cards_for_trick(self, trick_combo):
-        """Checks if the player has at least one of the required cards."""
         return any(card in self.hand for card in trick_combo)
 
     def has_all_cards_for_trick(self, trick_combo):
-        """Checks if the player has all required cards for a combo."""
         return all(self.hand.count(card) >= Counter(trick_combo).get(card, 0) for card in set(trick_combo))
 
 class SkateGame:
-    """Manages the overall game flow, state, and rules."""
     def __init__(self, game_mode):
         self.players = [Player("You")]
         if game_mode == 'pve': self.players.append(Player("Rival AI", is_ai=True))
@@ -207,42 +229,37 @@ class SkateGame:
         self.last_turn_summary = ""
 
     def run(self):
-        """The main game loop."""
         self.setup_game()
         while not self.game_over:
-            if self.trick_to_match:
-                self.matcher_turn()
-            else:
-                self.setter_turn()
+            if self.trick_to_match: self.matcher_turn()
+            else: self.setter_turn()
             for player in self.players:
                 if len(player.letters) >= MAX_LETTERS:
                     self.game_over = True
                     winner = self.players[1 - self.players.index(player)]
+                    logging.info(f"GAME OVER! {player.name} got S-K-8. Winner: {winner.name}")
                     clear_screen(); print(f"\nGAME OVER! {player.name} got S-K-8!\n{winner.name} wins the game!"); break
 
     def setup_game(self):
-        """Handles initial game setup: skater selection, deck creation, and dealing."""
-        clear_screen(); print("Welcome to SK8 - v0.6"); time.sleep(1)
+        clear_screen(); print("Welcome to SK8 - v1.0"); time.sleep(1)
         self.skater_selection()
         for player in self.players:
             player.deck = create_themed_deck(player.skater)
+            logging.info(f"{player.name} (as {player.skater.name}) created a deck with {len(player.deck)} cards.")
         self.deal_cards()
         clear_screen(); print("Skaters are locked in!")
-        for player in self.players:
-            verb = "are" if player.name == "You" else "is"
-            print(f"- {player.name} {verb} the {player.skater.name}")
+        for player in self.players: print(f"- {player.name} {'are' if player.name == 'You' else 'is'} the {player.skater.name}")
         input("\nPress Enter to start...");
 
     def skater_selection(self):
-        """Manages the skater selection screen for human and AI players."""
         available_skaters = list(SKATERS)
         for player in self.players:
             if player.is_ai:
                 chosen_skater = random.choice(available_skaters)
                 player.skater = chosen_skater
                 available_skaters.remove(chosen_skater)
+                logging.info(f"AI player {player.name} randomly selected {chosen_skater.name}")
                 print(f"{player.name} has chosen the {player.skater.name}!"); time.sleep(1.5); continue
-            
             clear_screen(); print(f"\n{player.name}, choose your skater:")
             for i, skater in enumerate(available_skaters): print(f"  {i+1}: {skater.name}\n     {skater.passive_desc}\n     {skater.activated_desc}\n     {skater.trade_desc}\n     {skater.negative_desc}")
             while True:
@@ -252,37 +269,51 @@ class SkateGame:
                     choice = int(choice_str)
                     if 1 <= choice <= len(available_skaters):
                         chosen_skater = available_skaters.pop(choice - 1)
-                        player.skater = chosen_skater; break
-                except (ValueError, IndexError):
-                    print("Invalid input.")
+                        player.skater = chosen_skater
+                        logging.info(f"Human player {player.name} chose {chosen_skater.name}")
+                        break
+                except (ValueError, IndexError): print("Invalid input.")
 
     def deal_cards(self):
-        """Deals starting hands to players."""
-        for _ in range(STARTING_HAND_SIZE - 1): # -1 because of the permanent Ollie
+        for _ in range(STARTING_HAND_SIZE - 1):
             for player in self.players: player.draw_card()
             
     def display_status(self):
-        """Clears the screen and shows the current game state."""
         clear_screen()
-        if self.last_turn_summary:
-            print(f"Last Turn: {self.last_turn_summary}\n")
-        for p in self.players:
-            score = p.letters if p.letters else "(-)"
-            print(f"{p.name} ({p.skater.name}, {len(p.deck)} cards left): {score}")
+        if self.last_turn_summary: print(f"Last Turn: {self.last_turn_summary}\n")
+        for p in self.players: print(f"{p.name} ({p.skater.name}, {len(p.deck)} cards left): {p.letters or '(-)'}")
         print("-" * 30)
         
     def calculate_combo_difficulty(self, combo, player, ignore_negative_ability=False):
-        """Calculates total difficulty and returns the score and a string explanation."""
         total_difficulty, explanation = 0, []
-        card_counts = Counter(combo)
-        stance = next((c for c in combo if c in STANCES), None)
+        combo_worklist = list(combo)
+    
+        late_bonus = 0
+        late_trick_type = ""
+        # Check for stanced and regular late tricks
+        if len(combo_worklist) >= 3 and combo_worklist[0] in STANCES and combo_worklist[1] == 'ollie' and (combo_worklist[2] in FLIP_TRICKS or combo_worklist[2] in SHUVIT_TRICKS):
+            trick = combo_worklist[2]
+            late_bonus = TRICKS_DATABASE.get(trick, 0)
+            late_trick_type = "Flip" if trick in FLIP_TRICKS else "Shuvit"
+        elif len(combo_worklist) >= 2 and combo_worklist[0] == 'ollie' and (combo_worklist[1] in FLIP_TRICKS or combo_worklist[1] in SHUVIT_TRICKS):
+            trick = combo_worklist[1]
+            late_bonus = TRICKS_DATABASE.get(trick, 0)
+            late_trick_type = "Flip" if trick in FLIP_TRICKS else "Shuvit"
+
+        if late_bonus > 0:
+            total_difficulty += late_bonus
+            explanation.append(f"  - Late {late_trick_type} Bonus (x2 {trick.replace('_',' ').title()}): +{late_bonus}")
+        
+        card_counts = Counter(combo_worklist)
+        stance = next((c for c in combo_worklist if c in STANCES), None)
+        
         if stance:
             total_difficulty += STANCES[stance]
             explanation.append(f"  - {stance.title()} Stance: +{STANCES[stance]}")
-        is_late_flip = 'ollie' in card_counts and any(c in FLIP_TRICKS for c in card_counts)
-        if is_late_flip: total_difficulty += 2; explanation.append(f"  - Late Flip Bonus: +2")
-        if any(c in GRINDS_SLIDES for c in combo) and not any(c in GRIND_SURFACES for c in combo):
+            
+        if any(c in GRINDS_SLIDES for c in combo_worklist) and not any(c in GRIND_SURFACES for c in combo_worklist):
             total_difficulty += 2; explanation.append("  - Flatground Grind (Low Ledge): +2")
+            
         for card, count in card_counts.items():
             if card not in TRICKS_DATABASE: continue
             base_difficulty, current_mods, mod_explanation = TRICKS_DATABASE[card], 0, []
@@ -295,58 +326,68 @@ class SkateGame:
                 neg = player.skater.negative_ability
                 if neg['type'] == 'difficulty_modifier' and card in neg['category']:
                     current_mods += neg['amount']; mod_explanation.append(f"Negative: +{neg['amount']}")
-            total_difficulty += base_difficulty + current_mods
-            explanation.append(f"  - {get_combo_display_name_single(card, count)}: {base_difficulty}{' (' + ', '.join(mod_explanation) + ')' if mod_explanation else ''}")
+            total_difficulty += (base_difficulty * count) + current_mods
+            explanation.append(f"  - {get_combo_display_name_single(card, count)}: {base_difficulty}{' x' + str(count) if count > 1 else ''}{' (' + ', '.join(mod_explanation) + ')' if mod_explanation else ''}")
+            
         if 'wax' in combo: total_difficulty -= 2; explanation.append("  - Wax Card: -2")
         return max(1, total_difficulty), explanation
 
     def validate_combo(self, combo):
-        """Validates a combo based on the game's rules."""
-        if not any(c in TRICKS_DATABASE or c in STANCES for c in combo): return False, "You must select at least one trick card."
-        stance_cards = [c for c in combo if c in STANCES]
-        flip_cards = [c for c in combo if c in FLIP_TRICKS]
-        shuvit_cards = [c for c in combo if c in SHUVIT_TRICKS]
+        if not any(c in TRICKS_DATABASE or c in STANCES for c in combo):
+            return False, "You must select at least one trick card."
         
+        if any(c in OBSTACLES for c in combo):
+            if not any(c in CORE_TRICKS for c in combo):
+                return False, "You must perform a trick (like an Ollie, Flip, etc.) to use an Obstacle."
+
+        stance_cards = [c for c in combo if c in STANCES]
         if len(stance_cards) > 1: return False, "Cannot use more than one Stance."
-        if stance_cards and 'ollie' in combo and flip_cards: return False, "Cannot do a Stance Ollie and a Late Flip at the same time."
-        if stance_cards and not flip_cards and 'ollie' not in combo: return False, "Stances must modify an Ollie or a Flip Trick."
+        if stance_cards and combo.index(stance_cards[0]) != 0: return False, "A Stance card must be played first."
+        if stance_cards and len(combo) == 1: return False, "A stance card must modify a trick."
+        if stance_cards and len(combo) > 1 and combo[1] not in CORE_TRICKS:
+            return False, "A Stance must be followed by a valid trick card."
+            
         if len(set(c for c in combo if c in STAIRS)) > 1: return False, "Cannot combine different stair sets."
         if sum(1 for c in combo if c in GRIND_SURFACES) > 1: return False, "Cannot use more than one grind surface."
         if 'kicker_ramp' in combo and any(c in STAIRS for c in combo): return False, "Cannot combine a kicker with stairs."
         if len(set(c for c in combo if c in GRINDS_SLIDES)) > 1: return False, "Can't do more than one type of grind."
         if 'wax' in combo and not any(c in GRINDS_SLIDES for c in combo): return False, "'Wax' only works with grinds or slides."
-        
-        # New Shuvit Rules
-        if len(set(shuvit_cards)) > 1: return False, "Cannot combine more than one type of Shuvit."
-        if flip_cards and shuvit_cards: return False, "Cannot combine a Flip and a Shuvit card. Use Varial Flips instead."
+        if len(set(c for c in combo if c in SHUVIT_TRICKS)) > 1: return False, "Cannot combine more than one type of Shuvit."
+        if any(c in FLIP_TRICKS for c in combo) and any(c in SHUVIT_TRICKS for c in combo):
+            # This allows late flips and late shuvits (which contain an ollie), but not a flip card and shuvit card together
+            if 'ollie' not in combo:
+                return False, "Cannot combine a Flip and a Shuvit card. Use Varial Flips instead."
 
         return True, "Valid combo!"
 
     def switch_setter(self): self.setter_index = (self.setter_index + 1) % len(self.players)
 
     def end_of_turn_cleanup(self, player):
-        """Discards any unused temporary cards at the end of a player's turn."""
         if player.temporary_cards:
             unused_temp = [card for card in player.temporary_cards if card in player.hand]
             if unused_temp:
+                logging.info(f"{player.name} is discarding unused temporary cards: {unused_temp}")
                 print(f"\nDiscarding unused temporary cards: {', '.join(unused_temp)}")
                 player.discard_cards(unused_temp); time.sleep(1.5)
             player.temporary_cards = []
 
     def setter_turn(self):
-        """Manages the turn of the player who is setting the trick."""
         setter = self.players[self.setter_index]
+        logging.info(f"--- SETTER TURN START --- Player: {setter.name}")
         cards_to_draw = STARTING_HAND_SIZE - len(setter.hand)
-        if cards_to_draw > 0: setter.draw_card(cards_to_draw)
+        if cards_to_draw > 0:
+            logging.debug(f"{setter.name} needs to draw {cards_to_draw} card(s).")
+            setter.draw_card(cards_to_draw)
+        logging.debug(f"{setter.name}'s current hand: {setter.hand}")
         if setter.is_ai: self.ai_setter_turn(setter)
         else: self.human_setter_turn(setter)
         self.end_of_turn_cleanup(setter)
+        logging.info(f"--- SETTER TURN END --- Player: {setter.name}")
 
     def human_setter_turn(self, setter):
-        """Manages the input and logic for a human player's setting turn."""
         while True:
             self.display_status()
-            print(f"\nYour turn to set ({setter.skater.name}).")
+            print(f"\nYour turn to set ({setter.skater.name}). Your input order matters!")
             for i, card in enumerate(setter.hand):
                 if card in SPECIAL_CARDS: print(f"  {i+1}: {card.replace('_', ' ').title()} - ({SPECIAL_CARDS[card]['description']})")
                 elif card in STANCES: print(f"  {i+1}: {card.replace('_', ' ').title()} (Stance)")
@@ -354,30 +395,38 @@ class SkateGame:
             print("-" * 30)
             
             action_choice = input("Enter card numbers to set a trick, or (a)bility > ").lower()
+            logging.debug(f"{setter.name} entered raw input: '{action_choice}'")
             
             try:
-                if action_choice == 'a': self.ability_menu(setter); return
-                
+                if action_choice == 'a':
+                    logging.info(f"{setter.name} chose to use an ability.")
+                    self.ability_menu(setter); return
                 indices = [int(i) - 1 for i in action_choice.split()]
                 combo = [setter.hand[i] for i in indices]
 
                 if 'thrasher_magazine' in combo:
                     if len(combo) > 1: print("\nThrasher Magazine must be played by itself."); time.sleep(2); continue
+                    logging.info(f"{setter.name} played Thrasher Magazine.")
                     print("\nShuffling your hand and drawing 7 new cards...");
                     hand_to_shuffle = [c for c in setter.hand if c != 'ollie']; setter.discard_cards(hand_to_shuffle + ['thrasher_magazine'])
                     setter.deck.extend(hand_to_shuffle); random.shuffle(setter.deck); setter.draw_card(num_cards=7); continue
                 
                 if 'sponsors' in combo:
                     if len(combo) > 1: print("\nSponsors must be played by itself."); time.sleep(2); continue
+                    logging.info(f"{setter.name} played Sponsors.")
                     print("\nDrawing 2 temporary cards from your sponsors..."); setter.discard_cards(['sponsors']); 
                     new_cards = setter.draw_card(num_cards=2); setter.temporary_cards.extend(new_cards); continue
                 
                 is_valid, message = self.validate_combo(combo)
-                if not is_valid: print(f"\nINVALID COMBO: {message}"); time.sleep(2); continue
+                if not is_valid:
+                    logging.warning(f"Invalid combo attempted by {setter.name}: {combo}. Reason: {message}")
+                    print(f"\nINVALID COMBO: {message}"); time.sleep(2); continue
                 
+                logging.info(f"{setter.name} is attempting combo: {combo}")
                 self.trick_to_match = combo
                 self.difficulty_to_beat, explanation = self.calculate_combo_difficulty(combo, setter, 'pro_model_deck' in combo)
-                
+                logging.info(f"Calculated difficulty: {self.difficulty_to_beat}. Explanation: {' '.join(explanation)}")
+
                 clear_screen(); print("--- ATTEMPTING TRICK ---")
                 print(f"Trick: {get_combo_display_name(self.trick_to_match)}\n\nDifficulty Calculation:")
                 for line in explanation: print(line)
@@ -388,30 +437,33 @@ class SkateGame:
                 opponent = self.players[(self.setter_index + 1) % len(self.players)]
                 if roll >= self.difficulty_to_beat and 'bail' in opponent.hand:
                     if opponent.is_ai or 'y' in input(f"{opponent.name} has a Bail card! Force a re-roll? (y/n) > ").lower():
+                        logging.info(f"{opponent.name} played Bail, forcing a re-roll.")
                         print(f"\n{opponent.name} plays Bail! You have to re-roll..."); opponent.discard_cards(['bail']); time.sleep(1)
                         roll = roll_dice(); print(f"Your re-roll is... {roll}!")
                 
                 if roll >= self.difficulty_to_beat:
                     print("You landed it!")
+                    logging.info(f"Trick SET successfully by {setter.name}. Roll: {roll} >= Difficulty: {self.difficulty_to_beat}")
                     self.last_turn_summary = f"{setter.name} landed a {get_combo_display_name(self.trick_to_match)}."
-                    trick_cards = [c for c in self.trick_to_match if (c in TRICKS_DATABASE or c in STANCES) and c != 'ollie']
+                    trick_cards = [c for c in self.trick_to_match if c in TRICKS_DATABASE or c in STANCES or c in OBSTACLES]
                     specials = [c for c in self.trick_to_match if c in SPECIAL_CARDS]
                     discards = specials
-                    if trick_cards:
-                        random_trick = random.choice(trick_cards); discards.append(random_trick)
+                    if any(c != 'ollie' for c in trick_cards):
+                        random_trick = random.choice([c for c in trick_cards if c != 'ollie'])
+                        discards.append(random_trick)
                         print(f"Cost: discard 1 random trick: {random_trick.replace('_', ' ').title()}")
                     setter.discard_cards(discards)
                 else:
-                    print("Bailed! You lose the cards."); self.last_turn_summary = f"{setter.name} bailed their set."
+                    print("Bailed! You lose the cards.")
+                    logging.info(f"Trick SET FAILED by {setter.name}. Roll: {roll} < Difficulty: {self.difficulty_to_beat}")
+                    self.last_turn_summary = f"{setter.name} bailed their set."
                     setter.discard_cards(self.trick_to_match); self.trick_to_match = None; self.switch_setter()
                 time.sleep(3); break
             except (ValueError, IndexError): print("\nInvalid input."); time.sleep(2)
 
     def ai_setter_turn(self, ai_player):
-        """Logic for the AI to decide and set a trick."""
         self.display_status(); print(f"\n--- {ai_player.name}'s Turn ---"); time.sleep(1.5)
         best_combo, best_difficulty = [], -1
-        # AI considers combos up to 3 cards for performance
         for i in range(1, min(len(ai_player.hand), 4)):
             for combo in combinations([c for c in ai_player.hand if c != 'ollie'], i):
                 combo_list = list(combo)
@@ -419,92 +471,124 @@ class SkateGame:
                     difficulty, _ = self.calculate_combo_difficulty(combo_list, ai_player)
                     specialty_score = sum(1 for c in combo_list if c in ai_player.skater.passive_ability['category'])
                     score = difficulty + specialty_score * 2
-                    if score > best_difficulty and difficulty < 14:
-                        best_difficulty = score; best_combo = combo_list
+                    if score > best_difficulty and difficulty < 14: best_difficulty = score; best_combo = combo_list
         if not best_combo:
+            logging.info(f"AI {ai_player.name} could not find a suitable combo and passed the turn.")
             print(f"{ai_player.name} has no good combos, passing turn."); self.switch_setter(); time.sleep(2); return
         self.trick_to_match = best_combo
         self.difficulty_to_beat, _ = self.calculate_combo_difficulty(best_combo, ai_player)
+        logging.info(f"AI {ai_player.name} is attempting combo: {best_combo} with difficulty {self.difficulty_to_beat}")
         print(f"{ai_player.name} is setting a {get_combo_display_name(self.trick_to_match)} (Difficulty: {self.difficulty_to_beat}).")
         time.sleep(3); print(f"\n{ai_player.name} is rolling..."); roll = roll_dice(); print(f"They rolled a {roll}!"); time.sleep(2)
         if roll >= self.difficulty_to_beat:
-            print("They landed it! The trick is set."); self.last_turn_summary = f"{ai_player.name} landed a {get_combo_display_name(self.trick_to_match)}."
+            print("They landed it! The trick is set.")
+            logging.info(f"AI trick SET successfully. Roll: {roll} >= Difficulty: {self.difficulty_to_beat}")
+            self.last_turn_summary = f"{ai_player.name} landed a {get_combo_display_name(self.trick_to_match)}."
             trick_cards = [c for c in self.trick_to_match if (c in TRICKS_DATABASE or c in STANCES) and c != 'ollie']
             specials = [c for c in self.trick_to_match if c in SPECIAL_CARDS]
             discards = specials
             if trick_cards: discards.append(random.choice(trick_cards))
             ai_player.discard_cards(discards)
         else:
-            print("They bailed! The turn passes."); self.last_turn_summary = f"{ai_player.name} bailed their set."
+            print("They bailed! The turn passes.")
+            logging.info(f"AI trick SET FAILED. Roll: {roll} < Difficulty: {self.difficulty_to_beat}")
+            self.last_turn_summary = f"{ai_player.name} bailed their set."
             ai_player.discard_cards(self.trick_to_match); self.trick_to_match = None; self.switch_setter()
         time.sleep(3)
 
     def matcher_turn(self):
-        """Manages the turn of the player who must match the trick."""
         matcher = self.players[(self.setter_index + 1) % len(self.players)]
+        logging.info(f"--- MATCHER TURN START --- Player: {matcher.name}")
+        logging.info(f"Trick to match: {self.trick_to_match}")
         if matcher.is_ai: self.ai_matcher_turn(matcher)
         else: self.human_matcher_turn(matcher)
         self.end_of_turn_cleanup(matcher)
+        logging.info(f"--- MATCHER TURN END --- Player: {matcher.name}")
 
     def human_matcher_turn(self, matcher):
-        """Manages the input and logic for a human player's matching turn."""
         self.display_status(); print(f"\n--- Your Turn to Match ---")
         print(f"You need to match: {get_combo_display_name(self.trick_to_match)}"); time.sleep(1)
-        ignore_neg = 'pro_model_deck' in matcher.hand and 'y' in input("Use 'Pro Model Deck'? (y/n) > ").lower()
-        if ignore_neg: matcher.discard_cards(['pro_model_deck'])
+        ignore_neg = False
+        if 'pro_model_deck' in matcher.hand and 'y' in input("Use 'Pro Model Deck'? (y/n) > ").lower():
+            logging.info(f"{matcher.name} used Pro Model Deck."); ignore_neg = True
+            matcher.discard_cards(['pro_model_deck'])
         base_difficulty, explanation = self.calculate_combo_difficulty(self.trick_to_match, matcher, ignore_neg)
         trick_only_combo = [c for c in self.trick_to_match if c in TRICKS_DATABASE or c in STANCES]
         print("\nDifficulty Calculation:"); [print(line) for line in explanation]
         if not matcher.has_all_cards_for_trick(trick_only_combo):
             difficulty = base_difficulty + 2; print("  - Defender Penalty (No cards): +2")
-        else: difficulty = base_difficulty; print("  - No Defender Penalty (You have all cards!)")
+            logging.info(f"Applying defender penalty, final difficulty: {difficulty}")
+        else:
+            difficulty = base_difficulty; print("  - No Defender Penalty (You have all cards!)")
+            logging.info(f"No defender penalty, final difficulty: {difficulty}")
         print(f"Your Final Target: {difficulty}")
         use_advantage = False
         if matcher.has_any_cards_for_trick(trick_only_combo):
             print("You have a required card! You can spend one to roll with ADVANTAGE.")
             if 'y' in input("Spend a card for advantage? (y/n) > ").lower():
-                 use_advantage = True # simplified for now
+                 use_advantage = True; logging.info(f"{matcher.name} is spending a card to roll with advantage.")
         input("Press Enter to roll..."); roll = roll_dice(with_advantage=use_advantage); print(f"You rolled a {roll}!")
         if roll < difficulty and 'focus' in matcher.hand and 'y' in input("Failed. Use 'Focus' to re-roll? (y/n) > ").lower():
+            logging.info(f"{matcher.name} used Focus for a re-roll.")
             matcher.discard_cards(['focus']); roll = roll_dice(with_advantage=use_advantage); print(f"New roll: {roll}!")
+        if roll < difficulty and len(matcher.letters) == MAX_LETTERS - 1:
+            print("\nYou're on your last letter! You get one more chance to land this.")
+            logging.info(f"{matcher.name} is on K and gets a last chance re-roll.")
+            input("Press Enter for your last chance roll...")
+            roll = roll_dice(with_advantage=use_advantage); print(f"Last chance roll... a {roll}!")
         time.sleep(2)
-        if roll >= difficulty: print("Nice! You landed it."); self.last_turn_summary = f"{matcher.name} matched the trick."; self.switch_setter()
-        else: print("Ah, you missed it! You get a letter."); matcher.letters += LETTERS[len(matcher.letters)]; self.last_turn_summary = f"{matcher.name} bailed and got a letter."
+        if roll >= difficulty:
+            print("Nice! You landed it.")
+            logging.info(f"{matcher.name} MATCHED the trick. Roll: {roll} >= Difficulty: {difficulty}")
+            self.last_turn_summary = f"{matcher.name} matched the trick."; self.switch_setter()
+        else:
+            print("Ah, you missed it! You get a letter.")
+            logging.warning(f"{matcher.name} FAILED to match the trick. Roll: {roll} < Difficulty: {difficulty}. They get a letter.")
+            matcher.letters += LETTERS[len(matcher.letters)]
+            self.last_turn_summary = f"{matcher.name} bailed and got a letter."
         self.trick_to_match = None; time.sleep(3)
     
     def ai_matcher_turn(self, ai_player):
-        """Logic for the AI's turn to match a trick."""
         self.display_status(); print(f"\n--- {ai_player.name}'s Turn to Match ---")
         print(f"They need to match: {get_combo_display_name(self.trick_to_match)}"); time.sleep(2)
         difficulty, _ = self.calculate_combo_difficulty(self.trick_to_match, ai_player)
         if not ai_player.has_all_cards_for_trick(self.trick_to_match): difficulty += 2
+        logging.info(f"AI {ai_player.name}'s final target difficulty is {difficulty}")
         print(f"Final Target: {difficulty}"); time.sleep(2)
         use_advantage = ai_player.has_any_cards_for_trick(self.trick_to_match) and difficulty > 7
         if use_advantage:
-            card_to_spend = next(c for c in ai_player.hand if c in self.trick_to_match)
-            ai_player.discard_cards([card_to_spend]); print(f"{ai_player.name} spends a {card_to_spend} for advantage!")
+            card_to_spend = next((c for c in ai_player.hand if c in self.trick_to_match), None)
+            if card_to_spend:
+                ai_player.discard_cards([card_to_spend])
+                logging.info(f"AI {ai_player.name} spends a {card_to_spend} for advantage!")
+                print(f"{ai_player.name} spends a {card_to_spend} for advantage!")
         roll = roll_dice(with_advantage=use_advantage); print(f"\n{ai_player.name} rolls a {roll}!")
         if roll < difficulty and 'focus' in ai_player.hand and difficulty > 8:
-            ai_player.discard_cards(['focus']); print(f"{ai_player.name} uses Focus to re-roll!")
+            ai_player.discard_cards(['focus']); logging.info(f"AI {ai_player.name} uses Focus to re-roll!")
+            print(f"{ai_player.name} uses Focus to re-roll!")
             roll = roll_dice(with_advantage=use_advantage); print(f"New roll: {roll}!")
+        if roll < difficulty and len(ai_player.letters) == MAX_LETTERS - 1:
+            print(f"\n{ai_player.name} is on K and gets a last chance re-roll!")
+            logging.info(f"AI {ai_player.name} is on K and gets a last chance re-roll.")
+            time.sleep(2); roll = roll_dice(with_advantage=use_advantage); print(f"Last chance roll... a {roll}!")
         time.sleep(2)
-        if roll >= difficulty: print("They landed it!"); self.last_turn_summary = f"{ai_player.name} matched the trick."; self.switch_setter()
-        else: print("They bailed! They get a letter."); ai_player.letters += LETTERS[len(ai_player.letters)]; self.last_turn_summary = f"{ai_player.name} bailed and got a letter."
+        if roll >= difficulty:
+            print("They landed it!"); logging.info(f"AI {ai_player.name} MATCHED the trick. Roll: {roll} >= Difficulty: {difficulty}")
+            self.last_turn_summary = f"{ai_player.name} matched the trick."; self.switch_setter()
+        else:
+            print("They bailed! They get a letter."); logging.warning(f"AI {ai_player.name} FAILED to match. Roll: {roll} < Difficulty: {difficulty}. They get a letter.")
+            ai_player.letters += LETTERS[len(ai_player.letters)]; self.last_turn_summary = f"{ai_player.name} bailed and got a letter."
         self.trick_to_match = None; time.sleep(3)
         
     def ability_menu(self, player):
-        """Presents the ability menu to a human player."""
         print(f"\n--- ABILITY MENU ---")
-        print(f"1: {player.skater.activated_desc}")
-        print(f"2: {player.skater.trade_desc}")
-        print("3: Cancel")
+        print(f"1: {player.skater.activated_desc}"); print(f"2: {player.skater.trade_desc}"); print("3: Cancel")
         choice = input("> ")
         if choice == '1': self.activate_skater_ability(player)
         elif choice == '2': self.activate_trade_ability(player)
-        else: return # Cancel and go back to main turn loop
+        else: return
         
     def activate_skater_ability(self, player):
-        """Allows a player to use their main activated ability."""
         ability = player.skater.activated_ability
         if len([c for c in player.hand if c != 'ollie']) < ability['cost']: print(f"\nNeed at least {ability['cost']} discardable cards."); time.sleep(2); return
         search_category = ability['category']
@@ -526,13 +610,13 @@ class SkateGame:
                     if 1 <= choice <= len(available_cards):
                         chosen_card = available_cards[choice-1]
                         player.deck.remove(chosen_card); player.hand.append(chosen_card); random.shuffle(player.deck)
+                        logging.info(f"{player.name} used their main ability, discarding {cards_to_discard} to find {chosen_card}.")
                         print(f"\nYou took '{chosen_card.replace('_', ' ').title()}' and added it to your hand."); break
                 except (ValueError, IndexError): print("Invalid input.")
             self.switch_setter(); time.sleep(3)
         except (ValueError, IndexError): print("\nInvalid input."); time.sleep(2)
 
     def activate_trade_ability(self, player):
-        """Allows a player to use their trade ability."""
         print("\n--- TRADE ABILITY ---")
         expertise_category = player.skater.activated_ability['category']
         expertise_name = next((k for k, v in ALL_CATEGORIES.items() if v == expertise_category), "Unknown").replace('_', ' ').title()
@@ -554,22 +638,18 @@ class SkateGame:
         try:
             choice = int(input("> "))
             if choice not in valid_trade_options: print("Invalid selection or no cards available in that category."); time.sleep(2); return
-            
             target_category_name, target_category = valid_trade_options[choice]
             available_cards = [card for card in player.deck if card in target_category]
             found_card = random.choice(available_cards)
-            player.discard_cards([card_to_discard])
-            player.deck.remove(found_card)
-            player.hand.append(found_card)
-            random.shuffle(player.deck)
+            player.discard_cards([card_to_discard]); player.deck.remove(found_card); player.hand.append(found_card); random.shuffle(player.deck)
+            logging.info(f"{player.name} used their trade ability, trading {card_to_discard} to find {found_card}.")
             print(f"You traded '{card_to_discard.replace('_',' ').title()}' and drew a '{found_card.replace('_',' ').title()}'!")
         except(ValueError, IndexError): print("Invalid selection."); time.sleep(2); return
         self.switch_setter(); time.sleep(3)
 
-
 if __name__ == "__main__":
     if setup_logging():
         clear_screen()
-        print("Welcome to SK8 - v0.6") # Updated version printout
+        print("Welcome to SK8 - v0.7.1")
         game = SkateGame('pve')
         game.run()
